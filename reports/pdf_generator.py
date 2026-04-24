@@ -44,6 +44,38 @@ def add_unicode_fonts_if_available(pdf: FPDF) -> bool:
     return False
 
 
+def transliterate_to_latin(text: str) -> str:
+    """
+    Конвертирует русский текст в латинскую транслитерацию.
+    Используется когда Unicode шрифты недоступны.
+    """
+    transliteration_table = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd',
+        'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i',
+        'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n',
+        'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
+        'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch',
+        'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '',
+        'э': 'e', 'ю': 'yu', 'я': 'ya',
+        'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D',
+        'Е': 'E', 'Ё': 'E', 'Ж': 'Zh', 'З': 'Z', 'И': 'I',
+        'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N',
+        'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T',
+        'У': 'U', 'Ф': 'F', 'Х': 'H', 'Ц': 'Ts', 'Ч': 'Ch',
+        'Ш': 'Sh', 'Щ': 'Sch', 'Ъ': '', 'Ы': 'Y', 'Ь': '',
+        'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya'
+    }
+    
+    result = []
+    for char in text:
+        if char in transliteration_table:
+            result.append(transliteration_table[char])
+        else:
+            result.append(char)
+    
+    return ''.join(result)
+
+
 class SalesReportPDF(FPDF):
     """
     Пользовательский класс PDF с заголовками и подвалом.
@@ -52,7 +84,8 @@ class SalesReportPDF(FPDF):
     def __init__(self, font_family: str = "Courier"):
         super().__init__()
         self.font_family = font_family
-        self.page_title = "Otchet po prodazham"  # Латиница для универсальности
+        self.page_title = "SALES REPORT"
+        self.unicode_enabled = False
     
     def header(self):
         """Заголовок на каждой странице."""
@@ -98,10 +131,18 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     # ======================== Создаем PDF ========================
     pdf = SalesReportPDF()
     
+    # ВАЖНО: Добавляем шрифты ДО add_page()
     # Пытаемся добавить Unicode шрифты
     has_unicode = add_unicode_fonts_if_available(pdf)
-    font_to_use = "DejaVu" if has_unicode else "Courier"
+    
+    if has_unicode:
+        font_to_use = "DejaVu"
+    else:
+        # Если Unicode не доступен, используем встроенный Courier
+        font_to_use = "Courier"
+    
     pdf.font_family = font_to_use
+    pdf.unicode_enabled = has_unicode
     
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -189,6 +230,10 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
             fill = False
         
         product_name = str(row["product"])[:60]
+        # Если нет Unicode, конвертируем в латиницу
+        if not has_unicode:
+            product_name = transliterate_to_latin(product_name)
+        
         pdf.cell(col_widths[0], 7, product_name, border=1, fill=fill)
         
         revenue_str = f"${row['amount']:,.0f}"
@@ -231,6 +276,10 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
             fill = False
         
         cat_name = str(row["category"])[:60]
+        # Если нет Unicode, конвертируем в латиницу
+        if not has_unicode:
+            cat_name = transliterate_to_latin(cat_name)
+        
         pdf.cell(col_widths_cat[0], 7, cat_name, border=1, fill=fill)
         
         revenue_str = f"${row['amount']:,.0f}"
