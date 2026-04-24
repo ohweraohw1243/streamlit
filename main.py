@@ -9,6 +9,7 @@ from datetime import datetime
 from data.db_manager import init_db, save_dataframe, get_data, list_uploads, get_upload_stats
 from data.parser import parse_excel
 from visualization.charts import revenue_over_time, top_products, category_breakdown, monthly_comparison
+from reports.pdf_generator import generate_pdf
 
 
 # ======================== Инициализация ========================
@@ -217,8 +218,28 @@ else:
         except Exception as e:
             st.error(f"Ошибка при отрисовке графика по месяцам: {e}")
     
-    # ======================== Дополнительная информация ========================
+    # ======================== Скачивание PDF отчета ========================
     st.divider()
+    
+    # Создаем колонки для центрирования кнопки
+    pdf_col1, pdf_col2, pdf_col3 = st.columns([1, 2, 1])
+    
+    with pdf_col2:
+        # Генерируем PDF и предоставляем кнопку скачивания
+        try:
+            pdf_bytes = generate_pdf(df, st.session_state.current_upload_id)
+            
+            st.download_button(
+                label="📥 Скачать PDF отчёт",
+                data=pdf_bytes,
+                file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"❌ Ошибка при создании PDF отчета: {e}")
+    
+    # ======================== Дополнительная информация ========================
     st.subheader("📊 Детальная таблица данных")
     
     # Позволяем пользователю отфильтровать данные по категории
