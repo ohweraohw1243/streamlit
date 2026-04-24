@@ -1,56 +1,73 @@
-# Streamlit Business Analytics Dashboard
+# 📊 Аналитический дашборд Streamlit
 
-An interactive business analytics dashboard built with Streamlit that allows users to upload data files, visualize trends, and generate PDF reports.
+Интерактивное приложение для анализа данных о продажах с загрузкой файлов, визуализацией и генерацией отчетов.
 
-## Features
+## 🎯 Возможности
 
-- **File Upload**: Support for Excel (.xlsx) and CSV files
-- **Data Storage**: SQLite database for persistent data storage
-- **Interactive Charts**: Plotly-powered visualizations
-- **PDF Reports**: Generate professional PDF reports from analysis
+- **Загрузка данных**: поддержка Excel (.xlsx) и CSV файлов
+- **Нормализация столбцов**: автоматическое преобразование русских и английских названий колонок
+- **База данных**: SQLite хранилище для сохранения данных
+- **Интерактивные графики**: Plotly визуализация выручки, товаров, категорий и месячных трендов
+- **PDF отчеты**: генерация профессиональных отчетов с метриками и таблицами
+- **История загрузок**: сохранение и быстрая загрузка предыдущих анализов
 
-## Installation
+## 📁 Структура проекта
 
-1. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+```
+data/
+├── db_manager.py      - SQLite операции (инициализация, сохранение, чтение)
+├── parser.py          - Парсер Excel/CSV с нормализацией колонок
+└── processor.py       - Трансформация данных
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+visualization/
+├── charts.py          - 4 интерактивных графика на Plotly
+└── dashboard.py       - Компоненты UI
 
-## Running the App
+reports/
+└── pdf_generator.py   - Генератор PDF отчетов на fpdf2
 
-```bash
-streamlit run main.py
+main.py               - Точка входа приложения Streamlit
+config.py             - Конфигурация и константы
+utils/                - Вспомогательные функции
+db/                   - SQLite база данных
+uploads/              - Временные загруженные файлы
 ```
 
-The app will open at `http://localhost:8501`
-
-## Project Structure
-
-- `main.py` - Streamlit app entry point
-- `config.py` - Configuration and constants
-- `data/` - Data handling modules (file upload, database, processing)
-- `visualization/` - Chart and dashboard components
-- `reports/` - PDF report generation
-- `utils/` - Helper utilities
-- `db/` - SQLite database storage
-- `uploads/` - Temporary file upload directory
-
-## Requirements
+## 🛠️ Стек технологий
 
 - Python 3.11
-- Streamlit
-- Pandas
-- Plotly
-- SQLite3
-- openpyxl
-- fpdf2
+- Streamlit - веб-фреймворк
+- Pandas - обработка данных
+- Plotly - интерактивные графики
+- SQLite3 - база данных
+- openpyxl - чтение Excel
+- fpdf2 - генерация PDF
 
-## License
+## 📝 Реализованные функции
 
-MIT
+### Парсер (data/parser.py)
+- `parse_excel()` - чтение файлов с автоматической нормализацией колонок
+- Поддержка вариантов: дата/date, товар/product, категория/category, сумма/amount, количество/quantity
+
+### База данных (data/db_manager.py)
+- `init_db()` - создание таблиц uploads и transactions
+- `save_dataframe()` - сохранение DataFrame в БД
+- `get_data()` - получение данных по upload_id
+- `list_uploads()` - список всех загрузок
+- `get_upload_stats()` - статистика по загрузке
+
+### Графики (visualization/charts.py)
+- `revenue_over_time()` - линейный график дневной выручки
+- `top_products()` - горизонтальная диаграмма топ-10 товаров
+- `category_breakdown()` - круговая диаграмма по категориям
+- `monthly_comparison()` - столбчатая диаграмма по месяцам
+
+### Отчеты (reports/pdf_generator.py)
+- `generate_pdf()` - создание PDF с метриками, таблицами и визуализацией
+
+### Приложение (main.py)
+- UI с загрузчиком файлов и историей
+- 4 метрические карточки (выручка, транзакции, товары, период)
+- 2x2 сетка интерактивных графиков
+- Таблица с фильтрацией по категориям
+- Кнопка скачивания PDF отчета
