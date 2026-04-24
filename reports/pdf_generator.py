@@ -100,11 +100,11 @@ class SalesReportPDF(FPDF):
         
         # Дата
         date_text = datetime.now().strftime("Created: %d.%m.%Y %H:%M")
-        self.cell(0, 10, date_text, align="L", w=100)
+        self.cell(100, 10, date_text, 0, 0, "L")
         
         # Номер страницы
         page_text = f"Page {self.page_no()}"
-        self.cell(0, 10, page_text, align="R")
+        self.cell(0, 10, page_text, 0, 1, "R")
 
 
 def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
