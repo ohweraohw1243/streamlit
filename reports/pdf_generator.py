@@ -3,6 +3,8 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import shutil
+import ssl
 import urllib.request
 
 import pandas as pd
@@ -13,6 +15,50 @@ def format_rub(value: float, digits: int = 2) -> str:
     """Форматирует число в рубли с пробелом как разделителем тысяч."""
     formatted = f"{value:,.{digits}f}".replace(",", " ").replace(".", ",")
     return f"{formatted} ₽"
+
+
+def ensure_dejavu_font(fonts_dir: Path) -> Path:
+    """Гарантирует наличие DejaVuSans.ttf в локальной папке и возвращает путь."""
+    fonts_dir.mkdir(exist_ok=True)
+    font_path = fonts_dir / "DejaVuSans.ttf"
+    if font_path.exists():
+        return font_path
+
+    font_url = "https://github.com/dejavu-fonts/dejavu-fonts/raw/main/ttf/DejaVuSans.ttf"
+
+    # 1) Стандартная загрузка с проверкой сертификата
+    try:
+        urllib.request.urlretrieve(font_url, font_path)
+        if font_path.exists():
+            return font_path
+    except Exception:
+        pass
+
+    # 2) Fallback для окружений с проблемным сертификатным хранилищем
+    try:
+        context = ssl._create_unverified_context()
+        with urllib.request.urlopen(font_url, context=context, timeout=30) as response:
+            font_path.write_bytes(response.read())
+        if font_path.exists():
+            return font_path
+    except Exception:
+        pass
+
+    # 3) Локальные системные пути как последний резерв
+    system_candidates = [
+        Path("/Library/Fonts/DejaVuSans.ttf"),
+        Path("/System/Library/Fonts/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/opentype/dejavu/DejaVuSans.ttf"),
+    ]
+    for candidate in system_candidates:
+        if candidate.exists():
+            shutil.copyfile(candidate, font_path)
+            return font_path
+
+    raise RuntimeError(
+        "Не удалось получить DejaVuSans.ttf. Проверьте интернет/SSL или добавьте файл вручную в reports/fonts/DejaVuSans.ttf"
+    )
 
 
 class SalesReportPDF(FPDF):
@@ -65,13 +111,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf = SalesReportPDF()
 
     fonts_dir = Path(__file__).parent / "fonts"
-    fonts_dir.mkdir(exist_ok=True)
-    font_path = fonts_dir / "DejaVuSans.ttf"
-    if not font_path.exists():
-        urllib.request.urlretrieve(
-            "https://github.com/dejavu-fonts/dejavu-fonts/raw/main/ttf/DejaVuSans.ttf",
-            font_path,
-        )
+    font_path = ensure_dejavu_font(fonts_dir)
 
     pdf.add_font("DejaVu", "", str(font_path))
     pdf.set_font("DejaVu", size=12)
