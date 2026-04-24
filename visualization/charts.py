@@ -101,7 +101,7 @@ def top_products(df: pd.DataFrame, n: int = 10) -> px.bar:
     fig.update_traces(
         marker_color=SECONDARY_COLOR,
         textposition='outside',  # Текст за пределами столбца
-        textformat=',.0f'  # Форматирование с разделителями тысяч
+        textfont=dict(size=10)  # Шрифт для текста
     )
     
     fig.update_layout(
@@ -211,7 +211,7 @@ def monthly_comparison(df: pd.DataFrame) -> px.bar:
     fig.update_traces(
         marker_color=PRIMARY_COLOR,
         textposition='outside',  # Текст над столбцом
-        textformat=',.0f'  # Форматирование с разделителями тысяч
+        textfont=dict(size=10)  # Шрифт для текста
     )
     
     fig.update_layout(
