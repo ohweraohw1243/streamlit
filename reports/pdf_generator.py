@@ -298,5 +298,8 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
         "All figures are based on the uploaded data."
     )
     
-    # Возвращаем PDF как байты
-    return pdf.output()
+    # Streamlit download_button принимает bytes, а fpdf2 может вернуть bytearray/str.
+    pdf_data = pdf.output(dest="S")
+    if isinstance(pdf_data, str):
+        return pdf_data.encode("latin-1")
+    return bytes(pdf_data)
