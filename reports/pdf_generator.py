@@ -11,14 +11,31 @@ import pandas as pd
 from fpdf import FPDF
 
 
-def format_rub(value: float, digits: int = 2) -> str:
+def format_rub(value: float, digits: int = 2, currency: str = "₽") -> str:
     """Форматирует число в рубли с пробелом как разделителем тысяч."""
     formatted = f"{value:,.{digits}f}".replace(",", " ").replace(".", ",")
-    return f"{formatted} ₽"
+    return f"{formatted} {currency}"
 
 
-def ensure_dejavu_font(fonts_dir: Path) -> Path:
-    """Гарантирует наличие DejaVuSans.ttf в локальной папке и возвращает путь."""
+def transliterate_to_latin(text: str) -> str:
+    """Транслитерация кириллицы для fallback-режима без Unicode-шрифта."""
+    table = {
+        "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+        "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+        "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+        "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "",
+        "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+        "А": "A", "Б": "B", "В": "V", "Г": "G", "Д": "D", "Е": "E", "Ё": "E",
+        "Ж": "Zh", "З": "Z", "И": "I", "Й": "Y", "К": "K", "Л": "L", "М": "M",
+        "Н": "N", "О": "O", "П": "P", "Р": "R", "С": "S", "Т": "T", "У": "U",
+        "Ф": "F", "Х": "H", "Ц": "Ts", "Ч": "Ch", "Ш": "Sh", "Щ": "Sch", "Ъ": "",
+        "Ы": "Y", "Ь": "", "Э": "E", "Ю": "Yu", "Я": "Ya",
+    }
+    return "".join(table.get(ch, ch) for ch in text)
+
+
+def ensure_dejavu_font(fonts_dir: Path) -> Optional[Path]:
+    """Пытается получить DejaVuSans.ttf в локальную папку и возвращает путь или None."""
     fonts_dir.mkdir(exist_ok=True)
     font_path = fonts_dir / "DejaVuSans.ttf"
     if font_path.exists():
@@ -46,6 +63,7 @@ def ensure_dejavu_font(fonts_dir: Path) -> Path:
 
     # 3) Локальные системные пути как последний резерв
     system_candidates = [
+        Path.home() / "Library" / "Fonts" / "DejaVuSans.ttf",
         Path("/Library/Fonts/DejaVuSans.ttf"),
         Path("/System/Library/Fonts/DejaVuSans.ttf"),
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
@@ -56,9 +74,7 @@ def ensure_dejavu_font(fonts_dir: Path) -> Path:
             shutil.copyfile(candidate, font_path)
             return font_path
 
-    raise RuntimeError(
-        "Не удалось получить DejaVuSans.ttf. Проверьте интернет/SSL или добавьте файл вручную в reports/fonts/DejaVuSans.ttf"
-    )
+    return None
 
 
 class SalesReportPDF(FPDF):
@@ -68,6 +84,7 @@ class SalesReportPDF(FPDF):
         super().__init__()
         self.font_family = font_family
         self.page_title = "ОТЧЁТ ПО ПРОДАЖАМ"
+        self.use_unicode = True
     
     def header(self):
         """Заголовок на каждой странице."""
@@ -80,10 +97,12 @@ class SalesReportPDF(FPDF):
         self.set_y(-15)
         self.set_font(self.font_family, "", 8)
 
-        date_text = datetime.now().strftime("Сформирован: %d.%m.%Y %H:%M")
+        date_prefix = "Сформирован:" if self.use_unicode else "Sformirovan:"
+        date_text = datetime.now().strftime(f"{date_prefix} %d.%m.%Y %H:%M")
         self.cell(100, 10, date_text, 0, 0, "L")
 
-        page_text = f"Стр. {self.page_no()}"
+        page_label = "Стр." if self.use_unicode else "Str."
+        page_text = f"{page_label} {self.page_no()}"
         self.cell(0, 10, page_text, 0, 1, "R")
 
 
@@ -112,31 +131,42 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
 
     fonts_dir = Path(__file__).parent / "fonts"
     font_path = ensure_dejavu_font(fonts_dir)
+    use_unicode = font_path is not None
+    if use_unicode:
+        pdf.add_font("DejaVu", "", str(font_path))
+        pdf.font_family = "DejaVu"
+    else:
+        pdf.font_family = "Helvetica"
+    pdf.use_unicode = use_unicode
 
-    pdf.add_font("DejaVu", "", str(font_path))
-    pdf.set_font("DejaVu", size=12)
+    def txt(value: str) -> str:
+        return value if use_unicode else transliterate_to_latin(value)
+
+    currency_symbol = "₽" if use_unicode else "RUB"
+    pdf.page_title = txt("ОТЧЁТ ПО ПРОДАЖАМ")
+    pdf.set_font(pdf.font_family, size=12)
     
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
     # ======================== Заголовок ========================
-    pdf.set_font("DejaVu", "", 18)
-    pdf.cell(0, 15, "ОТЧЁТ ПО ПРОДАЖАМ", ln=True, align="C")
+    pdf.set_font(pdf.font_family, "", 18)
+    pdf.cell(0, 15, txt("ОТЧЁТ ПО ПРОДАЖАМ"), ln=True, align="C")
     
     # Период
     date_min = df["date"].min().strftime("%d.%m.%Y")
     date_max = df["date"].max().strftime("%d.%m.%Y")
-    pdf.set_font("DejaVu", "", 11)
-    pdf.cell(0, 8, f"Период: {date_min} - {date_max}", ln=True, align="C")
+    pdf.set_font(pdf.font_family, "", 11)
+    pdf.cell(0, 8, txt(f"Период: {date_min} - {date_max}"), ln=True, align="C")
     
     if upload_id:
-        pdf.cell(0, 5, f"ID загрузки: {upload_id}", ln=True, align="C")
+        pdf.cell(0, 5, txt(f"ID загрузки: {upload_id}"), ln=True, align="C")
     
     pdf.ln(5)
     
     # ======================== Метрики ========================
-    pdf.set_font("DejaVu", "", 12)
-    pdf.cell(0, 10, "КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ", ln=True)
+    pdf.set_font(pdf.font_family, "", 12)
+    pdf.cell(0, 10, txt("КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ"), ln=True)
     
     # Вычисляем метрики
     total_revenue = df["amount"].sum()
@@ -147,19 +177,19 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     avg_check = total_revenue / total_transactions if total_transactions > 0 else 0
     
     # Таблица метрик
-    pdf.set_font("DejaVu", "", 10)
+    pdf.set_font(pdf.font_family, "", 10)
     col_width = 90
     row_height = 8
     
     pdf.set_fill_color(220, 220, 220)
     
     metrics_data = [
-        ("Общая выручка", format_rub(total_revenue, 2)),
-        ("Транзакции", f"{total_transactions}"),
-        ("Уникальные товары", f"{unique_products}"),
-        ("Категории", f"{unique_categories}"),
-        ("Средний чек", format_rub(avg_check, 2)),
-        ("Единиц продано", f"{total_quantity}"),
+        (txt("Общая выручка"), format_rub(total_revenue, 2, currency_symbol)),
+        (txt("Транзакции"), f"{total_transactions}"),
+        (txt("Уникальные товары"), f"{unique_products}"),
+        (txt("Категории"), f"{unique_categories}"),
+        (txt("Средний чек"), format_rub(avg_check, 2, currency_symbol)),
+        (txt("Единиц продано"), f"{total_quantity}"),
     ]
     
     for label, value in metrics_data:
@@ -169,8 +199,8 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.ln(8)
     
     # ======================== Топ товаров ========================
-    pdf.set_font("DejaVu", "", 12)
-    pdf.cell(0, 10, "ТОП 10 ТОВАРОВ", ln=True)
+    pdf.set_font(pdf.font_family, "", 12)
+    pdf.cell(0, 10, txt("ТОП 10 ТОВАРОВ"), ln=True)
     
     top_products = (
         df.groupby("product", as_index=False)
@@ -180,17 +210,17 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     )
     
     # Заголовки таблицы
-    pdf.set_font("DejaVu", "", 10)
+    pdf.set_font(pdf.font_family, "", 10)
     pdf.set_fill_color(25, 110, 180)
     pdf.set_text_color(255, 255, 255)
     
     col_widths = [70, 40, 40]
-    pdf.cell(col_widths[0], 8, "Товар", border=1, fill=True)
-    pdf.cell(col_widths[1], 8, "Выручка", border=1, fill=True, align="R")
-    pdf.cell(col_widths[2], 8, "Количество", border=1, fill=True, align="R", ln=True)
+    pdf.cell(col_widths[0], 8, txt("Товар"), border=1, fill=True)
+    pdf.cell(col_widths[1], 8, txt("Выручка"), border=1, fill=True, align="R")
+    pdf.cell(col_widths[2], 8, txt("Количество"), border=1, fill=True, align="R", ln=True)
     
     # Строки таблицы
-    pdf.set_font("DejaVu", "", 9)
+    pdf.set_font(pdf.font_family, "", 9)
     pdf.set_text_color(0, 0, 0)
     
     for idx, row in top_products.iterrows():
@@ -200,11 +230,11 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
         else:
             fill = False
         
-        product_name = str(row["product"])[:60]
+        product_name = txt(str(row["product"])[:60])
         
         pdf.cell(col_widths[0], 7, product_name, border=1, fill=fill)
         
-        revenue_str = format_rub(float(row["amount"]), 0)
+        revenue_str = format_rub(float(row["amount"]), 0, currency_symbol)
         pdf.cell(col_widths[1], 7, revenue_str, border=1, fill=fill, align="R")
 
         pdf.cell(col_widths[2], 7, f"{int(row['quantity'])}", border=1, fill=fill, align="R", ln=True)
@@ -212,8 +242,8 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.ln(8)
     
     # ======================== Категории ========================
-    pdf.set_font("DejaVu", "", 12)
-    pdf.cell(0, 10, "ПО КАТЕГОРИЯМ", ln=True)
+    pdf.set_font(pdf.font_family, "", 12)
+    pdf.cell(0, 10, txt("ПО КАТЕГОРИЯМ"), ln=True)
     
     categories = (
         df.groupby("category")["amount"]
@@ -222,16 +252,16 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
         .reset_index()
     )
     
-    pdf.set_font("DejaVu", "", 10)
+    pdf.set_font(pdf.font_family, "", 10)
     pdf.set_fill_color(25, 110, 180)
     pdf.set_text_color(255, 255, 255)
     
     col_widths_cat = [70, 40, 40]
-    pdf.cell(col_widths_cat[0], 8, "Категория", border=1, fill=True)
-    pdf.cell(col_widths_cat[1], 8, "Выручка", border=1, fill=True, align="R")
-    pdf.cell(col_widths_cat[2], 8, "Доля", border=1, fill=True, align="R", ln=True)
+    pdf.cell(col_widths_cat[0], 8, txt("Категория"), border=1, fill=True)
+    pdf.cell(col_widths_cat[1], 8, txt("Выручка"), border=1, fill=True, align="R")
+    pdf.cell(col_widths_cat[2], 8, txt("Доля"), border=1, fill=True, align="R", ln=True)
     
-    pdf.set_font("DejaVu", "", 9)
+    pdf.set_font(pdf.font_family, "", 9)
     pdf.set_text_color(0, 0, 0)
     
     total_cat_revenue = categories["amount"].sum()
@@ -243,23 +273,23 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
         else:
             fill = False
         
-        cat_name = str(row["category"])[:60]
+        cat_name = txt(str(row["category"])[:60])
         
         pdf.cell(col_widths_cat[0], 7, cat_name, border=1, fill=fill)
         
-        revenue_str = format_rub(float(row["amount"]), 0)
+        revenue_str = format_rub(float(row["amount"]), 0, currency_symbol)
         pdf.cell(col_widths_cat[1], 7, revenue_str, border=1, fill=fill, align="R")
         
         pct = (row["amount"] / total_cat_revenue * 100) if total_cat_revenue > 0 else 0
         pdf.cell(col_widths_cat[2], 7, f"{pct:.1f}%", border=1, fill=fill, align="R", ln=True)
     
     pdf.ln(10)
-    pdf.set_font("DejaVu", "", 8)
+    pdf.set_font(pdf.font_family, "", 8)
     pdf.set_text_color(128, 128, 128)
     pdf.multi_cell(
         0,
         5,
-        "Отчёт сформирован автоматически системой аналитики продаж."
+        txt("Отчёт сформирован автоматически системой аналитики продаж.")
     )
     
     # Streamlit download_button принимает bytes, а fpdf2 может вернуть bytearray/str.
