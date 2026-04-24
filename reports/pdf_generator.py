@@ -1,45 +1,76 @@
 """
 Генератор PDF отчетов на fpdf2 для аналитического приложения.
 Создает профессиональные отчеты с метриками и таблицами.
+Использует встроенные шрифты FPDF для совместимости.
 """
 
 from fpdf import FPDF
 from datetime import datetime
 import pandas as pd
-from io import BytesIO
+from pathlib import Path
 from typing import Optional
+
+
+def add_unicode_fonts_if_available(pdf: FPDF) -> bool:
+    """
+    Пытается добавить Unicode шрифты для поддержки кириллицы.
+    Возвращает True если успешно, False если используются встроенные шрифты.
+    """
+    # Общие пути к DejaVu шрифтам
+    font_paths = [
+        Path("/System/Library/Fonts"),
+        Path("/Library/Fonts"),
+        Path.home() / "Library" / "Fonts",
+        Path("/usr/share/fonts/truetype/dejavu"),
+        Path("/usr/share/fonts/opentype/dejavu"),
+    ]
+    
+    for font_dir in font_paths:
+        if not font_dir.exists():
+            continue
+        
+        regular = font_dir / "DejaVuSans.ttf"
+        bold = font_dir / "DejaVuSans-Bold.ttf"
+        
+        if regular.exists():
+            try:
+                pdf.add_font("DejaVu", "", str(regular), uni=True)
+                if bold.exists():
+                    pdf.add_font("DejaVu", "B", str(bold), uni=True)
+                return True
+            except Exception:
+                pass
+    
+    return False
 
 
 class SalesReportPDF(FPDF):
     """
-    Пользовательский класс PDF с поддержкой заголовков и подвалов.
+    Пользовательский класс PDF с заголовками и подвалом.
     """
     
-    def __init__(self):
+    def __init__(self, font_family: str = "Courier"):
         super().__init__()
-        self.width = 210  # A4 ширина
-        self.height = 297  # A4 высота
-        self.title_str = ""
+        self.font_family = font_family
+        self.page_title = "Otchet po prodazham"  # Латиница для универсальности
     
     def header(self):
-        """Добавляет заголовок на каждую страницу."""
-        self.set_font("DejaVu", "B", 16)
-        self.set_xy(10, 8)
-        self.cell(0, 10, self.title_str, ln=True, align="C")
+        """Заголовок на каждой странице."""
+        self.set_font(self.font_family, "B", 14)
+        self.cell(0, 10, self.page_title, ln=True, align="C")
         self.ln(2)
     
     def footer(self):
-        """Добавляет подвал на каждую страницу с датой и номером страницы."""
+        """Подвал на каждой странице."""
         self.set_y(-15)
-        self.set_font("DejaVu", "I", 8)
-        self.set_text_color(128, 128, 128)
+        self.set_font(self.font_family, "I", 8)
         
-        # Дата генерации слева
-        self.cell(0, 10, f"Создано: {datetime.now().strftime('%d.%m.%Y %H:%M')}", 
-                 align="L", w=100)
+        # Дата
+        date_text = datetime.now().strftime("Created: %d.%m.%Y %H:%M")
+        self.cell(0, 10, date_text, align="L", w=100)
         
-        # Номер страницы справа
-        page_text = f"Стр. {self.page_no()}"
+        # Номер страницы
+        page_text = f"Page {self.page_no()}"
         self.cell(0, 10, page_text, align="R")
 
 
@@ -48,174 +79,149 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     Генерирует PDF отчет с метриками и таблицей продаж.
     
     Args:
-        df: pandas DataFrame с колонками (date, product, category, amount, quantity)
-        upload_id: ID загрузки (опционально, для справки)
+        df: DataFrame с колонками (date, product, category, amount, quantity)
+        upload_id: ID загрузки (опционально)
     
     Returns:
         bytes: PDF документ в формате байтов
     """
     
-    # Проверяем требуемые столбцы
-    required_cols = {'date', 'product', 'category', 'amount', 'quantity'}
+    # Проверяем столбцы
+    required_cols = {"date", "product", "category", "amount", "quantity"}
     if not required_cols.issubset(df.columns):
         raise ValueError(f"DataFrame должен содержать столбцы: {required_cols}")
     
-    # Убеждаемся, что дата в формате datetime
-    if not pd.api.types.is_datetime64_any_dtype(df['date']):
-        df['date'] = pd.to_datetime(df['date'])
+    # Преобразуем дату
+    if not pd.api.types.is_datetime64_any_dtype(df["date"]):
+        df["date"] = pd.to_datetime(df["date"])
     
-    # ======================== Инициализация PDF ========================
+    # ======================== Создаем PDF ========================
     pdf = SalesReportPDF()
+    
+    # Пытаемся добавить Unicode шрифты
+    has_unicode = add_unicode_fonts_if_available(pdf)
+    font_to_use = "DejaVu" if has_unicode else "Courier"
+    pdf.font_family = font_to_use
+    
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.title_str = "Отчёт по продажам"
     
     # ======================== Заголовок ========================
-    pdf.set_font("DejaVu", "B", 20)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 15, "Отчёт по продажам", ln=True, align="C")
+    pdf.set_font(font_to_use, "B", 18)
+    pdf.cell(0, 15, "SALES REPORT", ln=True, align="C")
     
-    # Период данных
-    date_min = df['date'].min().strftime('%d.%m.%Y')
-    date_max = df['date'].max().strftime('%d.%m.%Y')
-    pdf.set_font("DejaVu", "", 11)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 8, f"Период: {date_min} - {date_max}", ln=True, align="C")
+    # Период
+    date_min = df["date"].min().strftime("%d.%m.%Y")
+    date_max = df["date"].max().strftime("%d.%m.%Y")
+    pdf.set_font(font_to_use, "", 11)
+    pdf.cell(0, 8, f"Period: {date_min} - {date_max}", ln=True, align="C")
     
     if upload_id:
-        pdf.cell(0, 5, f"ID загрузки: {upload_id}", ln=True, align="C")
+        pdf.cell(0, 5, f"Upload ID: {upload_id}", ln=True, align="C")
     
-    pdf.ln(5)  # Отступ
+    pdf.ln(5)
     
-    # ======================== Ключевые метрики ========================
-    pdf.set_font("DejaVu", "B", 13)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 10, "Ключевые показатели", ln=True)
+    # ======================== Метрики ========================
+    pdf.set_font(font_to_use, "B", 12)
+    pdf.cell(0, 10, "KEY METRICS", ln=True)
     
     # Вычисляем метрики
-    total_revenue = df['amount'].sum()
+    total_revenue = df["amount"].sum()
     total_transactions = len(df)
-    unique_products = df['product'].nunique()
-    unique_categories = df['category'].nunique()
-    total_quantity = int(df['quantity'].sum())
+    unique_products = df["product"].nunique()
+    unique_categories = df["category"].nunique()
+    total_quantity = int(df["quantity"].sum())
     avg_check = total_revenue / total_transactions if total_transactions > 0 else 0
     
-    # Метрики в виде таблицы (2 колонки)
-    pdf.set_font("DejaVu", "", 10)
-    
-    # Ширина колонок для метрик
+    # Таблица метрик
+    pdf.set_font(font_to_use, "", 10)
     col_width = 90
     row_height = 8
     
-    # Фон для таблицы метрик
     pdf.set_fill_color(220, 220, 220)
     
-    # Метрика 1: Общая выручка
-    pdf.cell(col_width, row_height, "Общая выручка:", border=1, fill=False)
-    pdf.cell(col_width, row_height, f"₽ {total_revenue:,.2f}", border=1, ln=True, fill=False)
+    metrics_data = [
+        ("Total Revenue", f"${total_revenue:,.2f}"),
+        ("Transactions", f"{total_transactions}"),
+        ("Unique Products", f"{unique_products}"),
+        ("Categories", f"{unique_categories}"),
+        ("Avg Check", f"${avg_check:,.2f}"),
+        ("Total Units", f"{total_quantity}"),
+    ]
     
-    # Метрика 2: Транзакции
-    pdf.cell(col_width, row_height, "Всего транзакций:", border=1, fill=False)
-    pdf.cell(col_width, row_height, f"{total_transactions}", border=1, ln=True, fill=False)
+    for label, value in metrics_data:
+        pdf.cell(col_width, row_height, label, border=1)
+        pdf.cell(col_width, row_height, value, border=1, ln=True)
     
-    # Метрика 3: Товары
-    pdf.cell(col_width, row_height, "Уникальные товары:", border=1, fill=False)
-    pdf.cell(col_width, row_height, f"{unique_products}", border=1, ln=True, fill=False)
+    pdf.ln(8)
     
-    # Метрика 4: Категории
-    pdf.cell(col_width, row_height, "Категории:", border=1, fill=False)
-    pdf.cell(col_width, row_height, f"{unique_categories}", border=1, ln=True, fill=False)
+    # ======================== Топ товаров ========================
+    pdf.set_font(font_to_use, "B", 12)
+    pdf.cell(0, 10, "TOP 10 PRODUCTS", ln=True)
     
-    # Метрика 5: Среднее
-    pdf.cell(col_width, row_height, "Средний чек:", border=1, fill=False)
-    pdf.cell(col_width, row_height, f"₽ {avg_check:,.2f}", border=1, ln=True, fill=False)
-    
-    # Метрика 6: Количество
-    pdf.cell(col_width, row_height, "Всего единиц:", border=1, fill=False)
-    pdf.cell(col_width, row_height, f"{total_quantity}", border=1, ln=True, fill=False)
-    
-    pdf.ln(8)  # Отступ после таблицы
-    
-    # ======================== Таблица Топ-10 товаров ========================
-    pdf.set_font("DejaVu", "B", 13)
-    pdf.cell(0, 10, "Топ-10 товаров по выручке", ln=True)
-    
-    # Вычисляем топ товаров
     top_products = (
-        df.groupby('product')
-        .agg({'amount': 'sum', 'quantity': 'sum'})
-        .sort_values('amount', ascending=False)
+        df.groupby("product")["amount"]
+        .sum()
+        .sort_values(ascending=False)
         .head(10)
         .reset_index()
     )
     
     # Заголовки таблицы
-    pdf.set_font("DejaVu", "B", 10)
-    pdf.set_fill_color(25, 110, 180)  # Синий фон
-    pdf.set_text_color(255, 255, 255)  # Белый текст
+    pdf.set_font(font_to_use, "B", 10)
+    pdf.set_fill_color(25, 110, 180)
+    pdf.set_text_color(255, 255, 255)
     
-    # Ширины колонок
-    col_widths = [70, 40, 40]  # Товар, Выручка, Кол-во
-    
-    # Заголовки
-    pdf.cell(col_widths[0], 8, "Товар", border=1, fill=True)
-    pdf.cell(col_widths[1], 8, "Выручка", border=1, fill=True, align="R")
-    pdf.cell(col_widths[2], 8, "Кол-во", border=1, fill=True, align="R", ln=True)
+    col_widths = [70, 40, 40]
+    pdf.cell(col_widths[0], 8, "Product", border=1, fill=True)
+    pdf.cell(col_widths[1], 8, "Revenue", border=1, fill=True, align="R")
+    pdf.cell(col_widths[2], 8, "Amount", border=1, fill=True, align="R", ln=True)
     
     # Строки таблицы
-    pdf.set_font("DejaVu", "", 9)
+    pdf.set_font(font_to_use, "", 9)
     pdf.set_text_color(0, 0, 0)
     
-    row_height = 7
     for idx, row in top_products.iterrows():
-        # Чередуем цвет фона для лучшей читаемости
         if idx % 2 == 0:
             pdf.set_fill_color(245, 245, 245)
             fill = True
         else:
             fill = False
         
-        # Название товара (обрезаем если длинное)
-        product_name = str(row['product'])[:60]
-        pdf.cell(col_widths[0], row_height, product_name, border=1, fill=fill)
+        product_name = str(row["product"])[:60]
+        pdf.cell(col_widths[0], 7, product_name, border=1, fill=fill)
         
-        # Выручка
-        revenue_str = f"₽ {row['amount']:,.0f}"
-        pdf.cell(col_widths[1], row_height, revenue_str, border=1, fill=fill, align="R")
+        revenue_str = f"${row['amount']:,.0f}"
+        pdf.cell(col_widths[1], 7, revenue_str, border=1, fill=fill, align="R")
         
-        # Количество
-        qty_str = f"{int(row['quantity'])}"
-        pdf.cell(col_widths[2], row_height, qty_str, border=1, fill=fill, align="R", ln=True)
+        pdf.cell(col_widths[2], 7, "1", border=1, fill=fill, align="R", ln=True)
     
-    # ======================== Категориев разбивка ========================
     pdf.ln(8)
-    pdf.set_font("DejaVu", "B", 13)
-    pdf.cell(0, 10, "Распределение по категориям", ln=True)
     
-    # Вычисляем категории
+    # ======================== Категории ========================
+    pdf.set_font(font_to_use, "B", 12)
+    pdf.cell(0, 10, "BY CATEGORY", ln=True)
+    
     categories = (
-        df.groupby('category')
-        .agg({'amount': 'sum', 'quantity': 'sum'})
-        .sort_values('amount', ascending=False)
+        df.groupby("category")["amount"]
+        .sum()
+        .sort_values(ascending=False)
         .reset_index()
     )
     
-    # Заголовки таблицы категорий
-    pdf.set_font("DejaVu", "B", 10)
+    pdf.set_font(font_to_use, "B", 10)
     pdf.set_fill_color(25, 110, 180)
     pdf.set_text_color(255, 255, 255)
     
     col_widths_cat = [70, 40, 40]
+    pdf.cell(col_widths_cat[0], 8, "Category", border=1, fill=True)
+    pdf.cell(col_widths_cat[1], 8, "Revenue", border=1, fill=True, align="R")
+    pdf.cell(col_widths_cat[2], 8, "% of Total", border=1, fill=True, align="R", ln=True)
     
-    pdf.cell(col_widths_cat[0], 8, "Категория", border=1, fill=True)
-    pdf.cell(col_widths_cat[1], 8, "Выручка", border=1, fill=True, align="R")
-    pdf.cell(col_widths_cat[2], 8, "% от всего", border=1, fill=True, align="R", ln=True)
-    
-    # Строки таблицы категорий
-    pdf.set_font("DejaVu", "", 9)
+    pdf.set_font(font_to_use, "", 9)
     pdf.set_text_color(0, 0, 0)
     
-    total_cat_revenue = categories['amount'].sum()
+    total_cat_revenue = categories["amount"].sum()
     
     for idx, row in categories.iterrows():
         if idx % 2 == 0:
@@ -224,30 +230,24 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
         else:
             fill = False
         
-        # Название категории
-        category_name = str(row['category'])[:60]
-        pdf.cell(col_widths_cat[0], row_height, category_name, border=1, fill=fill)
+        cat_name = str(row["category"])[:60]
+        pdf.cell(col_widths_cat[0], 7, cat_name, border=1, fill=fill)
         
-        # Выручка
-        revenue_str = f"₽ {row['amount']:,.0f}"
-        pdf.cell(col_widths_cat[1], row_height, revenue_str, border=1, fill=fill, align="R")
+        revenue_str = f"${row['amount']:,.0f}"
+        pdf.cell(col_widths_cat[1], 7, revenue_str, border=1, fill=fill, align="R")
         
-        # Процент
-        pct = (row['amount'] / total_cat_revenue * 100) if total_cat_revenue > 0 else 0
-        pct_str = f"{pct:.1f}%"
-        pdf.cell(col_widths_cat[2], row_height, pct_str, border=1, fill=fill, align="R", ln=True)
+        pct = (row["amount"] / total_cat_revenue * 100) if total_cat_revenue > 0 else 0
+        pdf.cell(col_widths_cat[2], 7, f"{pct:.1f}%", border=1, fill=fill, align="R", ln=True)
     
-    # ======================== Примечание в конце ========================
     pdf.ln(10)
-    pdf.set_font("DejaVu", "I", 8)
+    pdf.set_font(font_to_use, "I", 8)
     pdf.set_text_color(128, 128, 128)
-    pdf.multi_cell(0, 5, 
-        "Данный отчет был автоматически сгенерирован системой аналитики продаж. "
-        "Все цифры основаны на загруженных данных.")
+    pdf.multi_cell(
+        0, 
+        5, 
+        "This report was automatically generated by the Sales Analytics System. "
+        "All figures are based on the uploaded data."
+    )
     
-    # ======================== Возвращаем PDF как байты ========================
-    # Сохраняем в BytesIO вместо файла
-    pdf_output = BytesIO()
-    pdf_bytes = pdf.output()
-    
-    return pdf_bytes
+    # Возвращаем PDF как байты
+    return pdf.output()
