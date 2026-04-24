@@ -23,7 +23,7 @@ class SalesReportPDF(FPDF):
     
     def header(self):
         """Добавляет заголовок на каждую страницу."""
-        self.set_font("Arial", "B", 16)
+        self.set_font("DejaVu", "B", 16)
         self.set_xy(10, 8)
         self.cell(0, 10, self.title_str, ln=True, align="C")
         self.ln(2)
@@ -31,7 +31,7 @@ class SalesReportPDF(FPDF):
     def footer(self):
         """Добавляет подвал на каждую страницу с датой и номером страницы."""
         self.set_y(-15)
-        self.set_font("Arial", "I", 8)
+        self.set_font("DejaVu", "I", 8)
         self.set_text_color(128, 128, 128)
         
         # Дата генерации слева
@@ -71,14 +71,14 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.title_str = "Отчёт по продажам"
     
     # ======================== Заголовок ========================
-    pdf.set_font("Arial", "B", 20)
+    pdf.set_font("DejaVu", "B", 20)
     pdf.set_text_color(0, 0, 0)
     pdf.cell(0, 15, "Отчёт по продажам", ln=True, align="C")
     
     # Период данных
     date_min = df['date'].min().strftime('%d.%m.%Y')
     date_max = df['date'].max().strftime('%d.%m.%Y')
-    pdf.set_font("Arial", "", 11)
+    pdf.set_font("DejaVu", "", 11)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 8, f"Период: {date_min} - {date_max}", ln=True, align="C")
     
@@ -88,7 +88,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.ln(5)  # Отступ
     
     # ======================== Ключевые метрики ========================
-    pdf.set_font("Arial", "B", 13)
+    pdf.set_font("DejaVu", "B", 13)
     pdf.set_text_color(0, 0, 0)
     pdf.cell(0, 10, "Ключевые показатели", ln=True)
     
@@ -101,7 +101,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     avg_check = total_revenue / total_transactions if total_transactions > 0 else 0
     
     # Метрики в виде таблицы (2 колонки)
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font("DejaVu", "", 10)
     
     # Ширина колонок для метрик
     col_width = 90
@@ -137,7 +137,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.ln(8)  # Отступ после таблицы
     
     # ======================== Таблица Топ-10 товаров ========================
-    pdf.set_font("Arial", "B", 13)
+    pdf.set_font("DejaVu", "B", 13)
     pdf.cell(0, 10, "Топ-10 товаров по выручке", ln=True)
     
     # Вычисляем топ товаров
@@ -150,7 +150,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     )
     
     # Заголовки таблицы
-    pdf.set_font("Arial", "B", 10)
+    pdf.set_font("DejaVu", "B", 10)
     pdf.set_fill_color(25, 110, 180)  # Синий фон
     pdf.set_text_color(255, 255, 255)  # Белый текст
     
@@ -163,7 +163,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.cell(col_widths[2], 8, "Кол-во", border=1, fill=True, align="R", ln=True)
     
     # Строки таблицы
-    pdf.set_font("Arial", "", 9)
+    pdf.set_font("DejaVu", "", 9)
     pdf.set_text_color(0, 0, 0)
     
     row_height = 7
@@ -189,7 +189,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     
     # ======================== Категориев разбивка ========================
     pdf.ln(8)
-    pdf.set_font("Arial", "B", 13)
+    pdf.set_font("DejaVu", "B", 13)
     pdf.cell(0, 10, "Распределение по категориям", ln=True)
     
     # Вычисляем категории
@@ -201,7 +201,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     )
     
     # Заголовки таблицы категорий
-    pdf.set_font("Arial", "B", 10)
+    pdf.set_font("DejaVu", "B", 10)
     pdf.set_fill_color(25, 110, 180)
     pdf.set_text_color(255, 255, 255)
     
@@ -212,7 +212,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     pdf.cell(col_widths_cat[2], 8, "% от всего", border=1, fill=True, align="R", ln=True)
     
     # Строки таблицы категорий
-    pdf.set_font("Arial", "", 9)
+    pdf.set_font("DejaVu", "", 9)
     pdf.set_text_color(0, 0, 0)
     
     total_cat_revenue = categories['amount'].sum()
@@ -239,7 +239,7 @@ def generate_pdf(df: pd.DataFrame, upload_id: Optional[int] = None) -> bytes:
     
     # ======================== Примечание в конце ========================
     pdf.ln(10)
-    pdf.set_font("Arial", "I", 8)
+    pdf.set_font("DejaVu", "I", 8)
     pdf.set_text_color(128, 128, 128)
     pdf.multi_cell(0, 5, 
         "Данный отчет был автоматически сгенерирован системой аналитики продаж. "

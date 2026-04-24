@@ -86,6 +86,7 @@ with st.sidebar:
                     
                     # Успешное сообщение
                     st.success(f"✅ Файл загружен успешно! Загружено {len(df)} строк.")
+                    st.rerun()  # Перезагружаем приложение для отображения новых данных
                 
                 except ValueError as e:
                     # Ошибка валидации данных
@@ -123,6 +124,7 @@ with st.sidebar:
             st.session_state.current_upload_id = selected_id
             st.session_state.current_df = get_data(selected_id)
             st.success("✅ Данные загружены из истории")
+            st.rerun()  # Перезагружаем приложение для отображения новых данных
     else:
         st.info("📭 Нет сохраненных загрузок. Загрузите файл чтобы начать.")
 
